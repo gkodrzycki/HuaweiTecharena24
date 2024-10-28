@@ -1,0 +1,2 @@
+/usr/bin/ar qc libann.a CMakeFiles/ann.dir/ann.cpp.o
+/usr/bin/ranlib libann.a
