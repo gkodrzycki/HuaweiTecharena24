@@ -23,9 +23,6 @@ int ann_L = 100;
 
 bool is_load = 0;
 
-
-
-
 using IndexNSG = ann::NSG;
 std::unique_ptr<ann::GraphSearcherBase> searcher;
 
@@ -75,7 +72,7 @@ void set_ann_ef(void *ptr, int ann_ef){
 void ann_search(void *ptr, int n, const float* x, int k, float* distances,
                 int32_t* labels, int num_p){
     IndexNSG *vidx = (IndexNSG *)ptr;
-    // 调用c++函数
+    // 调用c++函数  //To chyba oznacza wywołaj swoją funckę?
 #pragma omp parallel for num_threads(num_p)
     for (int i = 0; i < n; ++i) {
         size_t offset = i * vidx->d;
