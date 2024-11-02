@@ -3,51 +3,20 @@
 #include <string>
 #include <unordered_map>
 
-#include "ann/quant/bf16_quant.hpp"
-#include "ann/quant/e5m2_quant.hpp"
-#include "ann/quant/fp16_quant.hpp"
 #include "ann/quant/fp32_quant.hpp"
-#include "ann/quant/product_quant.hpp"
 #include "ann/quant/sq4_quant.hpp"
-#include "ann/quant/sq8p_quant.hpp"
-#include "ann/quant/sq4u_quant.hpp"
-#include "ann/quant/sq4ua_quant.hpp"
-#include "ann/quant/sq6_quant.hpp"
 #include "ann/quant/sq8_quant.hpp"
-#include "ann/quant/sq8u_quant.hpp"
 
 namespace ann {
 
-enum class QuantizerType {
-  FP32,
-  FP16,
-  BF16,
-  E5M2,
-  SQ8U,
-  SQ8,
-  SQ6,
-  SQ4U,
-  SQ4UA,
-  SQ4,
-  SQ8P,
-  PQ8
-};
+enum class QuantizerType { FP32, SQ8, SQ4 };
 
-inline std::unordered_map<std::string, QuantizerType> quantizer_map;
+inline std::unordered_map<int, QuantizerType> quantizer_map;
 
 inline int quantizer_map_init = [] {
-  quantizer_map["FP32"] = QuantizerType::FP32;
-  quantizer_map["FP16"] = QuantizerType::FP16;
-  quantizer_map["BF16"] = QuantizerType::BF16;
-  quantizer_map["E5M2"] = QuantizerType::E5M2;
-  quantizer_map["SQ8U"] = QuantizerType::SQ8U;
-  quantizer_map["SQ8"] = QuantizerType::SQ8;
-  quantizer_map["SQ6"] = QuantizerType::SQ6;
-  quantizer_map["SQ4U"] = QuantizerType::SQ4U;
-  quantizer_map["SQ4UA"] = QuantizerType::SQ4UA;
-  quantizer_map["SQ4"] = QuantizerType::SQ4;
-  quantizer_map["SQ8P"] = QuantizerType::SQ8P;
-  quantizer_map["PQ8"] = QuantizerType::PQ8;
+  quantizer_map[0] = QuantizerType::FP32;
+  quantizer_map[1] = QuantizerType::SQ8;
+  quantizer_map[2] = QuantizerType::SQ8;
   return 42;
 }();
 

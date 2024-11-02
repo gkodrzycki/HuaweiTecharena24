@@ -7,24 +7,27 @@
 
 #include "ann/builder.hpp"
 #include "ann/nsg/nsg.hpp"
-#include "ann/searcher/graph_searcher.hpp"
+#include "ann/searcher.hpp"
 
 
 
 int nndescent_iter = 15;
-int nndescent_GK = 200;
-int nndescent_S = 10;
+int nndescent_GK = 300;
+int nndescent_S = 15;
 int nndescent_R = 100;
-int nndescent_L = 200;
+int nndescent_L = 300;
 
 int ann_R = 50;
 int ann_M = 8;
-int ann_L = 100;
+int ann_L = 200;
 
 bool is_load = 0;
 
+
+
+
 using IndexNSG = ann::NSG;
-std::unique_ptr<ann::GraphSearcherBase> searcher;
+std::unique_ptr<ann::SearcherBase> searcher;
 
 void *ann_init(int K_features, int R, const char *metric){
     ann_R = R;
@@ -57,7 +60,7 @@ void ann_add(void *ptr, int n, float * x,  const char *store){
     }
 
 
-    searcher = std::move(ann::create_searcher(std::move(vidx->final_graph), vidx->metric, "SQ8U"));
+    searcher = std::move(ann::create_searcher(std::move(vidx->final_graph), vidx->metric, 1));
 
 
     searcher->SetData(x, n, vidx->d);
@@ -72,7 +75,7 @@ void set_ann_ef(void *ptr, int ann_ef){
 void ann_search(void *ptr, int n, const float* x, int k, float* distances,
                 int32_t* labels, int num_p){
     IndexNSG *vidx = (IndexNSG *)ptr;
-    // 调用c++函数  //To chyba oznacza wywołaj swoją funckę?
+    // 调用c++函数
 #pragma omp parallel for num_threads(num_p)
     for (int i = 0; i < n; ++i) {
         size_t offset = i * vidx->d;

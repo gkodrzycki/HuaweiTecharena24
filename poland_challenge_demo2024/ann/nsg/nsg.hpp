@@ -23,7 +23,7 @@ struct NSG : public Builder {
   int ep;
   Graph<int> final_graph;
   RandomGenerator rng; ///< random generator
-  DistFunc<float, float, float> dist_func;
+  Dist<float, float, float> dist_func;
   int GK;
   int nndescent_S;
   int nndescent_R;
@@ -35,11 +35,9 @@ struct NSG : public Builder {
     this->C = R + 100;
     srand(0x1998);
     if (metric == "L2") {
-      dist_func = helpa::l2_fp32_fp32;
+      dist_func = L2SqrRef;
     } else if (metric == "IP") {
-      dist_func = [](const float *x, const float *y, const int32_t d) {
-        return helpa::dot_fp32_fp32(x, y, d);
-      };
+      dist_func = IPRef;
     }
     this->GK = 64;
     this->nndescent_S = 10;
@@ -92,10 +90,10 @@ struct NSG : public Builder {
       avg += size;
     }
     avg = avg / n;
-    //printf("Degree Statistics: Max = %d, Min = %d, Avg = %lf\n", max, min, avg);
+    printf("Degree Statistics: Max = %d, Min = %d, Avg = %lf\n", max, min, avg);
   }
 
-  Graph<int> GetGraph() override { return std::move(final_graph); }
+  Graph<int> GetGraph() override { return final_graph; }
 
   void Init(const Graph<int> &knng) {
     std::vector<float> center(d);
@@ -197,13 +195,13 @@ struct NSG : public Builder {
       pool.clear();
       tmp.clear();
       int cur = cnt += 1;
-      if (cur % 100000 == 0) {
-        //printf("NSG building progress: [%d/%d]\n", cur, nb);
+      if (cur % 10000 == 0) {
+        printf("NSG building progress: [%d/%d]\n", cur, nb);
       }
     }
     auto ed = std::chrono::high_resolution_clock::now();
     auto ela = std::chrono::duration<double>(ed - st).count();
-    //printf("NSG building cost: %.2lfs\n", ela);
+    printf("NSG building cost: %.2lfs\n", ela);
 
     std::vector<std::mutex> locks(nb);
 #pragma omp parallel for schedule(dynamic)

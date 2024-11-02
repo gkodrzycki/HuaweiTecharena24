@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./graph.hpp"
+#include "ann/graph.hpp"
 
 namespace ann {
 

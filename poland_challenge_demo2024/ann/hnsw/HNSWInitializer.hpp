@@ -5,57 +5,45 @@
 #include <vector>
 
 #include "ann/memory.hpp"
-#include "ann/neighbor.hpp"
-#include "ann/quant/computer.hpp"
+#include "ann/quant/quant.hpp"
 
 namespace ann {
 
 struct HNSWInitializer {
-  int32_t N, K;
+  int N, K;
   int ep;
   std::vector<int> levels;
-  std::vector<int *> lists;
+  std::vector<std::vector<int, align_alloc<int>>> lists;
   HNSWInitializer() = default;
 
-  explicit HNSWInitializer(int32_t n, int32_t K = 0)
+  explicit HNSWInitializer(int n, int K = 0)
       : N(n), K(K), levels(n), lists(n) {}
 
-  HNSWInitializer(const HNSWInitializer &rhs) = delete;
+  HNSWInitializer(const HNSWInitializer &rhs) = default;
 
-  HNSWInitializer(HNSWInitializer &&rhs) = default;
-
-  ~HNSWInitializer() {
-    for (auto &p : lists) {
-      free(p);
-      p = nullptr;
-    }
-  }
-
-  int at(int32_t level, int32_t u, int32_t i) const {
+  int at(int level, int u, int i) const {
     return lists[u][(level - 1) * K + i];
   }
 
-  int &at(int32_t level, int32_t u, int32_t i) {
-    return lists[u][(level - 1) * K + i];
+  int &at(int level, int u, int i) { return lists[u][(level - 1) * K + i]; }
+
+  const int *edges(int level, int u) const {
+    return lists[u].data() + (level - 1) * K;
   }
 
-  const int *edges(int32_t level, int32_t u) const {
-    return lists[u] + (level - 1) * K;
-  }
+  int *edges(int level, int u) { return lists[u].data() + (level - 1) * K; }
 
-  int *edges(int32_t level, int32_t u) { return lists[u] + (level - 1) * K; }
-
-  void initialize(inference::NeighborPoolConcept auto &pool,
-                  const ComputerConcept auto &computer) const {
+  template <typename Pool, typename Computer>
+  void initialize(Pool &pool, const Computer &computer) const {
     int u = ep;
     auto cur_dist = computer(u);
-    for (int32_t level = levels[u]; level > 0; --level) {
+    for (int level = levels[u]; level > 0; --level) {
       bool changed = true;
       while (changed) {
         changed = false;
-        const int32_t *list = edges(level, u);
-        for (int32_t i = 0; i < K && list[i] != -1; ++i) {
-          int32_t v = list[i];
+        const int *list = edges(level, u);
+        for (int i = 0; i < K && list[i] != -1; ++i) {
+          int v = list[i];
           auto dist = computer(v);
           if (dist < cur_dist) {
             cur_dist = dist;
@@ -77,8 +65,8 @@ struct HNSWInitializer {
       int cur;
       reader.read((char *)&cur, 4);
       levels[i] = cur / K;
-      lists[i] = (int *)align_alloc(cur * 4, -1);
-      reader.read((char *)lists[i], cur * 4);
+      lists[i].assign(cur, -1);
+      reader.read((char *)lists[i].data(), cur * 4);
     }
   }
 
@@ -89,7 +77,7 @@ struct HNSWInitializer {
     for (int i = 0; i < N; ++i) {
       int cur = levels[i] * K;
       writer.write((char *)&cur, 4);
-      writer.write((char *)lists[i], cur * 4);
+      writer.write((char *)lists[i].data(), cur * 4);
     }
   }
 };

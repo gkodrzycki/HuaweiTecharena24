@@ -4,10 +4,10 @@ message(STATUS "Architecture: ${ARCHITECTURE}")
 if(${ARCHITECTURE} STREQUAL "aarch64")
 
     # debug flags: -fsanitize=address,undefined -D_GLIBCXX_DEBUG
-    set(CMAKE_C_COMPILER /usr/bin/gcc)
-    set(CMAKE_CXX_COMPILER /usr/bin/g++)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,/usr/lib64/")
-    link_directories("/usr/lib64/")
+    set(CMAKE_C_COMPILER /home/dawid/gcc-13.2.0/bin/gcc)
+    set(CMAKE_CXX_COMPILER /home/dawid/gcc-13.2.0/bin/g++)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,/home/dawid/gcc-13.2.0/lib64/")
+    link_directories("/home/dawid/gcc-13.2.0/lib64/")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ldl -lz -gdwarf-2")
     #set(HDF5_LIB_PATH  ${/home/dedup/anaconda3/lib/libhdf5.a})
     #include_directories(/home/dedup/anaconda3/lib/hdf5/include)
@@ -23,7 +23,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 message(PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a -falign-jumps=64 -fopenmp -fPIC -Ofast -march=native -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a -falign-jumps=64 -fopenmp -fPIC -Ofast -march=native")
 
 
 

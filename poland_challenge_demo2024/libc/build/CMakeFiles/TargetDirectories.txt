@@ -1,4 +1,0 @@
-/home/gk/Stuff/projects/HuaweiTecharena24/poland_challenge_demo2024/libc/build/CMakeFiles/ann.dir
-/home/gk/Stuff/projects/HuaweiTecharena24/poland_challenge_demo2024/libc/build/CMakeFiles/run.dir
-/home/gk/Stuff/projects/HuaweiTecharena24/poland_challenge_demo2024/libc/build/CMakeFiles/edit_cache.dir
-/home/gk/Stuff/projects/HuaweiTecharena24/poland_challenge_demo2024/libc/build/CMakeFiles/rebuild_cache.dir

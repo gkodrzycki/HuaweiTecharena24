@@ -10,7 +10,7 @@
 
 #include "ann/graph.hpp"
 #include "ann/neighbor.hpp"
-#include "ann/simd/common.hpp"
+#include "ann/simd/distance.hpp"
 #include "ann/utils.hpp"
 
 namespace ann {
@@ -89,15 +89,13 @@ struct NNDescent {
   int iters = 10;
   int random_seed = 347;
   int L;
-  DistFunc<float, float, float> dist_func;
+  Dist<float, float, float> dist_func;
 
   NNDescent(int64_t dim, const std::string &metric) : d(dim) {
     if (metric == "L2") {
-      dist_func = helpa::l2_fp32_fp32;
+      dist_func = L2SqrRef;
     } else if (metric == "IP") {
-      dist_func = [](const float *x, const float *y, const int32_t d) {
-        return helpa::dot_fp32_fp32(x, y, d);
-      };
+      dist_func = IPRef;
     }
   }
 
@@ -158,11 +156,11 @@ struct NNDescent {
       Join();
       Update();
       float recall = EvalRecall(eval_points, eval_gt);
-      //printf("NNDescent iter: [%d/%d], recall: %f\n", iter, iters, recall);
+      printf("NNDescent iter: [%d/%d], recall: %f\n", iter, iters, recall);
     }
     auto t2 = std::chrono::high_resolution_clock::now();
     auto ela = std::chrono::duration<double>(t2 - t1).count();
-    //printf("NNDescent cost: %.2lfs\n", ela);
+    printf("NNDescent cost: %.2lfs\n", ela);
   }
 
   void Join() {

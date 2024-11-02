@@ -1,1 +1,0 @@
-/usr/bin/g++  -std=c++2a -falign-jumps=64 -fopenmp -fPIC -Ofast -march=native -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl CMakeFiles/run.dir/main.cpp.o -o run  libann.a -ldl -lz 

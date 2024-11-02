@@ -5,41 +5,40 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
-#include "ann/common.hpp"
-
 namespace ann {
 
-inline void *align1G(size_t nbytes, uint8_t x = 0) {
-  size_t len = (nbytes + (1 << 30) - 1) >> 30 << 30;
-  auto p = std::aligned_alloc(1 << 30, len);
-  madvise(p, len, MADV_HUGEPAGE);
-  std::memset(p, x, len);
-  return p;
-}
+template <typename T> struct align_alloc {
+  T *ptr = nullptr;
+  using value_type = T;
+  T *allocate(int n) {
+    if (n <= 1 << 14) {
+      int sz = (n * sizeof(T) + 63) >> 6 << 6;
+      return ptr = (T *)std::aligned_alloc(64, sz);
+    }
+    int sz = (n * sizeof(T) + (1 << 21) - 1) >> 21 << 21;
+    ptr = (T *)std::aligned_alloc(1 << 21, sz);
+    madvise(ptr, sz, MADV_HUGEPAGE);
+    return ptr;
+  }
+  void deallocate(T *, int) { free(ptr); }
+  template <typename U> struct rebind {
+    typedef align_alloc<U> other;
+  };
+  bool operator!=(const align_alloc &rhs) { return ptr != rhs.ptr; }
+};
 
-inline void *align2M(size_t nbytes, uint8_t x = 0) {
+inline void *alloc2M(size_t nbytes) {
   size_t len = (nbytes + (1 << 21) - 1) >> 21 << 21;
   auto p = std::aligned_alloc(1 << 21, len);
-  madvise(p, len, MADV_HUGEPAGE);
-  std::memset(p, x, len);
+  std::memset(p, 0, len);
   return p;
 }
 
-inline void *alloc64B(size_t nbytes, uint8_t x = 0) {
+inline void *alloc64B(size_t nbytes) {
   size_t len = (nbytes + (1 << 6) - 1) >> 6 << 6;
   auto p = std::aligned_alloc(1 << 6, len);
-  std::memset(p, x, len);
+  std::memset(p, 0, len);
   return p;
-}
-
-inline void *align_alloc(size_t nbytes, uint8_t x = 0) {
-  if (nbytes >= 1 * 1024 * 1024 * 1024) {
-    return align1G(nbytes, x);
-  } else if (nbytes >= 2 * 1024 * 1024) {
-    return align2M(nbytes, x);
-  } else {
-    return alloc64B(nbytes, x);
-  }
 }
 
 } // namespace ann
