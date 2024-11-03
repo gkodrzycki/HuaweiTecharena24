@@ -1,60 +1,47 @@
 #pragma once
 
-#include "ann/common.hpp"
-#include "ann/memory.hpp"
-#include "ann/neighbor.hpp"
-#include "ann/quant/fp32_quant.hpp"
-#include "ann/simd/distance.hpp"
+#include "ann/quant/calibrator.hpp"
+#include "ann/quant/computer.hpp"
+#include "ann/quant/quant_base.hpp"
+#include "ann/quant/utils.hpp"
 
 #include <cmath>
+#include <vector>
 
 namespace ann {
 
-template <Metric metric, typename Reorderer = FP32Quantizer<metric>,
-          int DIM = 0>
-struct SQ4Quantizer {
+template <Metric metric, typename CalibratorType = AffinePerDimCalibrator<15>,
+          typename Template = Quantizer<metric, 16, 4>>
+struct SQ4Quantizer : Template {
+  using type = SQ4Quantizer;
   using data_type = uint8_t;
-  constexpr static int kAlign = 128;
-  float mx = -HUGE_VALF, mi = HUGE_VALF, dif;
-  int d, d_align;
-  int64_t code_size;
-  data_type *codes = nullptr;
 
-  Reorderer reorderer;
+  constexpr static float drop_ratio = 0.01f;
+
+  CalibratorType calibrator;
 
   SQ4Quantizer() = default;
 
-  explicit SQ4Quantizer(int dim)
-      : d(dim), d_align(do_align(dim, kAlign)), code_size(d_align / 2),
-        reorderer(dim) {}
+  explicit SQ4Quantizer(int dim) : Template(dim), calibrator(dim) {}
 
-  ~SQ4Quantizer() { free(codes); }
-
-  void train(const float *data, int n) {
-    for (int64_t i = 0; i < n * d; ++i) {
-      mx = std::max(mx, data[i]);
-      mi = std::min(mi, data[i]);
-    }
-    dif = mx - mi;
-    codes = (data_type *)alloc2M(n * code_size);
-    for (int i = 0; i < n; ++i) {
-      encode(data + i * d, get_data(i));
-    }
-    reorderer.train(data, n);
+  void train(const float *data, int32_t n) {
+    calibrator.calibrate(data, n, this->dim(), drop_ratio);
+    calibrator.mins.resize(this->dim_align());
+    calibrator.difs.resize(this->dim_align());
   }
 
-  char *get_data(int u) const { return (char *)codes + u * code_size; }
+  void add(const float *data, int32_t n) {
+    this->storage.init(n);
+#pragma omp parallel for schedule(dynamic)
+    for (int32_t i = 0; i < n; ++i) {
+      encode(data + (int64_t)i * this->dim(), (data_type *)this->get_code(i));
+    }
+  }
 
-  void encode(const float *from, char *to) const {
-    for (int j = 0; j < d; ++j) {
-      float x = (from[j] - mi) / dif;
-      if (x < 0.0) {
-        x = 0.0;
-      }
-      if (x > 0.999) {
-        x = 0.999;
-      }
-      uint8_t y = 16 * x;
+  void encode(const float *from, data_type *to) const {
+    memset(to, 0, (this->dim() + 1) / 2);
+    for (int j = 0; j < this->dim(); ++j) {
+      uint8_t y = calibrator.transform(from[j], j);
       if (j & 1) {
         to[j / 2] |= y << 4;
       } else {
@@ -63,46 +50,28 @@ struct SQ4Quantizer {
     }
   }
 
-  template <typename Pool>
-  void reorder(const Pool &pool, const float *q, int *dst, int k) const {
-    int cap = pool.capacity();
-    auto computer = reorderer.get_computer(q);
-    searcher::MaxHeap<typename Reorderer::template Computer<0>::dist_type> heap(
-        k);
-    for (int i = 0; i < cap; ++i) {
-      if (i + 1 < cap) {
-        computer.prefetch(pool.id(i + 1), 1);
+  void decode(const data_type *from, float *to) const {
+    for (int j = 0; j < this->dim(); ++j) {
+      uint8_t y;
+      if (j & 1) {
+        y = from[j / 2] >> 4 & 15;
+      } else {
+        y = from[j / 2] & 15;
       }
-      int id = pool.id(i);
-      float dist = computer(id);
-      heap.push(id, dist);
-    }
-    for (int i = 0; i < k; ++i) {
-      dst[i] = heap.pop();
+      to[j] = calibrator.transform_back(y, j);
     }
   }
 
-  template <int DALIGN = do_align(DIM, kAlign)> struct Computer {
-    using dist_type = int32_t;
-    constexpr static auto dist_func = L2SqrSQ4;
-    const SQ4Quantizer &quant;
-    uint8_t *q;
-    Computer(const SQ4Quantizer &quant, const float *query)
-        : quant(quant), q((uint8_t *)alloc64B(quant.code_size)) {
-      quant.encode(query, (char *)q);
-    }
-    ~Computer() { free(q); }
-    dist_type operator()(int u) const {
-      return dist_func(q, (data_type *)quant.get_data(u), quant.d_align);
-    }
-    void prefetch(int u, int lines) const {
-      mem_prefetch(quant.get_data(u), lines);
-    }
-  };
+  constexpr static auto dist_func =
+      metric == Metric::L2 ? L2SqrSQ4_ext : IPSQ4_ext;
+
+  using ComputerType = ComputerImpl<Tensor, dist_func, float, float, float,
+                                    uint8_t, const float *, const float *>;
 
   auto get_computer(const float *query) const {
-    return Computer<0>(*this, query);
-  }
+    return ComputerType(this->storage, query, MemCpyTag{},
+                        calibrator.mins.data(), calibrator.difs.data());
+  };
 };
 
 } // namespace ann

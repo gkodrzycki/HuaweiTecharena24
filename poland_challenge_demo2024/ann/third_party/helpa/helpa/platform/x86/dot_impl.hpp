@@ -225,23 +225,85 @@ dota_s8_s8(const int8_t* x, const int8_t* y, const int32_t d) {
 
 inline int32_t
 dota_u8_s8_256(const uint8_t* x, const int8_t* y) {
-    __m512i sum0 = _mm512_setzero_si512();
-    __m512i sum1 = _mm512_setzero_si512();
-    auto xx0 = _mm512_load_si512(x);
-    auto xx1 = _mm512_load_si512(x + 64);
-    auto xx2 = _mm512_load_si512(x + 128);
-    auto xx3 = _mm512_load_si512(x + 192);
-    auto yy0 = _mm512_load_si512(y);
-    auto yy1 = _mm512_load_si512(y + 64);
-    auto yy2 = _mm512_load_si512(y + 128);
-    auto yy3 = _mm512_load_si512(y + 192);
-    asm("vpdpbusd %1, %2, %0" : "+x"(sum0) : "mx"(xx0), "x"(yy0));
-    asm("vpdpbusd %1, %2, %0" : "+x"(sum1) : "mx"(xx1), "x"(yy1));
-    asm("vpdpbusd %1, %2, %0" : "+x"(sum0) : "mx"(xx2), "x"(yy2));
-    asm("vpdpbusd %1, %2, %0" : "+x"(sum1) : "mx"(xx3), "x"(yy3));
-    sum0 = _mm512_add_epi32(sum0, sum1);
-    return -_mm512_reduce_add_epi32(sum0);
+    __m256i sum0 = _mm256_setzero_si256();
+    __m256i sum1 = _mm256_setzero_si256();
+    __m256i sum2 = _mm256_setzero_si256();
+    __m256i sum3 = _mm256_setzero_si256();
+
+    // Load 32-byte chunks of x and y into __m256i registers
+    auto xx0 = _mm256_load_si256((__m256i*)(x));
+    auto xx1 = _mm256_load_si256((__m256i*)(x + 32));
+    auto xx2 = _mm256_load_si256((__m256i*)(x + 64));
+    auto xx3 = _mm256_load_si256((__m256i*)(x + 96));
+    auto yy0 = _mm256_load_si256((__m256i*)(y));
+    auto yy1 = _mm256_load_si256((__m256i*)(y + 32));
+    auto yy2 = _mm256_load_si256((__m256i*)(y + 64));
+    auto yy3 = _mm256_load_si256((__m256i*)(y + 96));
+
+    // Convert unsigned bytes in x to signed 16-bit integers
+    auto x0_16 = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(xx0));
+    auto x1_16 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(xx0, 1));
+    auto x2_16 = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(xx1));
+    auto x3_16 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(xx1, 1));
+    auto x4_16 = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(xx2));
+    auto x5_16 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(xx2, 1));
+    auto x6_16 = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(xx3));
+    auto x7_16 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(xx3, 1));
+
+    // Convert signed bytes in y to signed 16-bit integers
+    auto y0_16 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(yy0));
+    auto y1_16 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(yy0, 1));
+    auto y2_16 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(yy1));
+    auto y3_16 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(yy1, 1));
+    auto y4_16 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(yy2));
+    auto y5_16 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(yy2, 1));
+    auto y6_16 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(yy3));
+    auto y7_16 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(yy3, 1));
+
+    // Multiply and accumulate
+    sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(x0_16, y0_16));
+    sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(x1_16, y1_16));
+    sum1 = _mm256_add_epi32(sum1, _mm256_madd_epi16(x2_16, y2_16));
+    sum1 = _mm256_add_epi32(sum1, _mm256_madd_epi16(x3_16, y3_16));
+    sum2 = _mm256_add_epi32(sum2, _mm256_madd_epi16(x4_16, y4_16));
+    sum2 = _mm256_add_epi32(sum2, _mm256_madd_epi16(x5_16, y5_16));
+    sum3 = _mm256_add_epi32(sum3, _mm256_madd_epi16(x6_16, y6_16));
+    sum3 = _mm256_add_epi32(sum3, _mm256_madd_epi16(x7_16, y7_16));
+
+    // Sum all results into a single 256-bit vector
+    sum0 = _mm256_add_epi32(sum0, sum1);
+    sum2 = _mm256_add_epi32(sum2, sum3);
+    sum0 = _mm256_add_epi32(sum0, sum2);
+
+    // Horizontal sum to get the final result
+    int32_t result[8];
+    _mm256_store_si256((__m256i*)result, sum0);
+    int32_t total = 0;
+    for (int i = 0; i < 8; i++) {
+        total += result[i];
+    }
+
+    return -total;
 }
+// inline int32_t
+// dota_u8_s8_256(const uint8_t* x, const int8_t* y) {
+//     __m512i sum0 = _mm512_setzero_si512();
+//     __m512i sum1 = _mm512_setzero_si512();
+//     auto xx0 = _mm512_load_si512(x);
+//     auto xx1 = _mm512_load_si512(x + 64);
+//     auto xx2 = _mm512_load_si512(x + 128);
+//     auto xx3 = _mm512_load_si512(x + 192);
+//     auto yy0 = _mm512_load_si512(y);
+//     auto yy1 = _mm512_load_si512(y + 64);
+//     auto yy2 = _mm512_load_si512(y + 128);
+//     auto yy3 = _mm512_load_si512(y + 192);
+//     asm("vpdpbusd %1, %2, %0" : "+x"(sum0) : "mx"(xx0), "x"(yy0));
+//     asm("vpdpbusd %1, %2, %0" : "+x"(sum1) : "mx"(xx1), "x"(yy1));
+//     asm("vpdpbusd %1, %2, %0" : "+x"(sum0) : "mx"(xx2), "x"(yy2));
+//     asm("vpdpbusd %1, %2, %0" : "+x"(sum1) : "mx"(xx3), "x"(yy3));
+//     sum0 = _mm512_add_epi32(sum0, sum1);
+//     return -_mm512_reduce_add_epi32(sum0);
+// }
 
 inline int32_t
 dota_u8_s8(const uint8_t* x, const int8_t* y, const int32_t d) {

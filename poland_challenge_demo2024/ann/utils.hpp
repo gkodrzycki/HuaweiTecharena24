@@ -7,6 +7,19 @@
 
 namespace ann {
 
+struct Timer {
+#define CUR_TIME std::chrono::high_resolution_clock::now()
+  Timer(const std::string &msg) : msg(msg), start(CUR_TIME) {}
+
+  ~Timer() {
+    auto ed = CUR_TIME;
+    auto ela = std::chrono::duration<double>(ed - start).count();
+    printf(" [%s] time %lfs\n", msg.c_str(), ela);
+  }
+  std::string msg;
+  std::chrono::time_point<std::chrono::high_resolution_clock> start;
+};
+
 using LockGuard = std::lock_guard<std::mutex>;
 
 inline void GenRandom(std::mt19937 &rng, int *addr, const int size,
@@ -47,5 +60,10 @@ struct RandomGenerator {
 
   double rand_double() { return mt() / double(mt.max()); }
 };
+
+
+
+
+
 
 } // namespace ann

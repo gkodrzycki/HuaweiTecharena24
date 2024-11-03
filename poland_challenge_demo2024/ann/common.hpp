@@ -39,11 +39,6 @@ inline constexpr int64_t do_align(int64_t x, int64_t align) {
       "GCC optimize (\"unroll-loops,associative-math,no-signed-zeros\")")
 #define FAST_END _Pragma("GCC pop_options")
 #define ann_INLINE [[gnu::always_inline]]
-#else
-
-#define FAST_BEGIN
-#define FAST_END
-#define ann_INLINE
 
 #endif
 

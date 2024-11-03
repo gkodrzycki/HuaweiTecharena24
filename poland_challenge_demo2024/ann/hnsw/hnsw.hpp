@@ -1,74 +1,68 @@
 #pragma once
 
-#include "ann/hnsw/HNSWInitializer.hpp"
 #include "ann/builder.hpp"
 #include "ann/common.hpp"
 #include "ann/graph.hpp"
-#include "ann/hnswlib/hnswlib.h"
-#include "ann/hnswlib/space_ip.h"
-#include "ann/hnswlib/space_l2.h"
+#include "ann/hnsw/HNSWInitializer.hpp"
 #include "ann/hnswlib/hnswalg.h"
+#include "ann/memory.hpp"
+#include "ann/quant/quant.hpp"
+#include "ann/quant/quant_base.hpp"
 #include <chrono>
 #include <memory>
 
 namespace ann {
 
-struct HNSW : public Builder {
-  int nb, dim;
-  int M, efConstruction;
-  std::unique_ptr<hnswlib::HierarchicalNSW<float>> hnsw = nullptr;
-  std::unique_ptr<hnswlib::SpaceInterface<float>> space = nullptr;
+template <SymComputableQuantConcept QuantType> struct HNSW : public Builder {
+  int64_t nb;
+  int32_t R, efConstruction;
+  std::unique_ptr<HierarchicalNSW<QuantType>> hnsw = nullptr;
 
-  Graph<int> final_graph;
+  QuantType quant;
 
-  HNSW(int dim, const std::string &metric, int R = 32, int L = 200)
-      : dim(dim), M(R / 2), efConstruction(L) {
-    auto m = metric_map[metric];
-    if (m == Metric::L2) {
-      space = std::make_unique<hnswlib::L2Space>(dim);
-    } else if (m == Metric::IP) {
-      space = std::make_unique<hnswlib::InnerProductSpace>(dim);
-    } else {
-      printf("Unsupported metric type\n");
-    }
-  }
+  Graph<int32_t> final_graph;
 
-  void Build(float *data, int N) override {
+  HNSW(int dim, int32_t R = 32, int32_t L = 200)
+      : R(R), efConstruction(L), quant(dim) {}
+
+  void Build(float *data, int32_t N) override {
     nb = N;
-    hnsw = std::make_unique<hnswlib::HierarchicalNSW<float>>(space.get(), N, M,
-                                                             efConstruction);
-    std::atomic<int> cnt{0};
+    quant.train(data, N);
+    quant.add(data, N);
+    hnsw = std::make_unique<HierarchicalNSW<QuantType>>(quant, N, R / 2,
+                                                        efConstruction);
+    std::atomic<int32_t> cnt{0};
     auto st = std::chrono::high_resolution_clock::now();
-    hnsw->addPoint(data, 0);
+    hnsw->addPoint(0);
 #pragma omp parallel for schedule(dynamic)
-    for (int i = 1; i < nb; ++i) {
-      hnsw->addPoint(data + i * dim, i);
-      int cur = cnt += 1;
+    for (int32_t i = 1; i < nb; ++i) {
+      hnsw->addPoint(i);
+      int32_t cur = cnt += 1;
       if (cur % 10000 == 0) {
-        printf("HNSW building progress: [%d/%d]\n", cur, nb);
+        //printf("HNSW building progress: [%d/%ld]\n", cur, nb);
       }
     }
     auto ed = std::chrono::high_resolution_clock::now();
     auto ela = std::chrono::duration<double>(ed - st).count();
-    printf("HNSW building cost: %.2lfs\n", ela);
-    final_graph.init(nb, 2 * M);
+    //printf("HNSW building cost: %.2lfs\n", ela);
+    final_graph.init(nb, R);
 #pragma omp parallel for
-    for (int i = 0; i < nb; ++i) {
-      int *edges = (int *)hnsw->get_linklist0(i);
+    for (int64_t i = 0; i < nb; ++i) {
+      int32_t *edges = (int32_t *)hnsw->get_linklist0(i);
       for (int j = 1; j <= edges[0]; ++j) {
         final_graph.at(i, j - 1) = edges[j];
       }
     }
-    auto initializer = std::make_unique<HNSWInitializer>(nb, M);
+    auto initializer = std::make_unique<HNSWInitializer>(nb, R / 2);
     initializer->ep = hnsw->enterpoint_node_;
-    for (int i = 0; i < nb; ++i) {
-      int level = hnsw->element_levels_[i];
+    for (int64_t i = 0; i < nb; ++i) {
+      int32_t level = hnsw->element_levels_[i];
       initializer->levels[i] = level;
       if (level > 0) {
-        initializer->lists[i].assign(level * M, -1);
-        for (int j = 1; j <= level; ++j) {
-          int *edges = (int *)hnsw->get_linklist(i, j);
-          for (int k = 1; k <= edges[0]; ++k) {
+        initializer->lists[i] = (int *)align_alloc(level * R * 2, -1);
+        for (int32_t j = 1; j <= level; ++j) {
+          int32_t *edges = (int32_t *)hnsw->get_linklist(i, j);
+          for (int32_t k = 1; k <= edges[0]; ++k) {
             initializer->at(j, i, k - 1) = edges[k];
           }
         }
@@ -77,6 +71,33 @@ struct HNSW : public Builder {
     final_graph.initializer = std::move(initializer);
   }
 
-  Graph<int> GetGraph() override { return final_graph; }
+  Graph<int32_t> GetGraph() override { return std::move(final_graph); }
 };
+
+inline std::unique_ptr<Builder>
+create_hnsw(const std::string &metric, const std::string &quantizer = "SQ8U",
+            int32_t dim = 0, int32_t R = 32, int32_t L = 200) {
+  auto m = metric_map[metric];
+  auto qua = quantizer_map[quantizer];
+  if (qua == QuantizerType::FP32) {
+    if (m == Metric::L2) {
+      return std::make_unique<HNSW<FP32Quantizer<Metric::L2>>>(dim, R, L);
+    }
+    if (m == Metric::IP) {
+      return std::make_unique<HNSW<FP32Quantizer<Metric::IP>>>(dim, R, L);
+    }
+  }
+  if (qua == QuantizerType::FP16) {
+    if (m == Metric::L2) {
+      return std::make_unique<HNSW<FP16Quantizer<Metric::L2>>>(dim, R, L);
+    }
+    if (m == Metric::IP) {
+      return std::make_unique<HNSW<FP16Quantizer<Metric::IP>>>(dim, R, L);
+    }
+  }
+
+  ("Quantizer type %s not supported\n", quantizer.c_str());
+  return nullptr;
+}
+
 } // namespace ann
