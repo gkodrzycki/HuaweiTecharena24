@@ -17,7 +17,8 @@ void* ann_init(int K_features, int R, const char* metric) {
     // printf("%d %s\n", K_features, metric);
     dimension = K_features;
     metrica = metric;
-    auto* index = new IndexHNSW(K_features, R, R + 50);
+    R = 96;
+    auto* index = new IndexHNSW(K_features, R, R + 100);
     return index;
 }
 
@@ -51,10 +52,17 @@ void ann_add(void* ptr, int n, float* x, const char* store) {
 void set_ann_ef(void* ptr, int ann_ef) {
     auto index = static_cast<IndexHNSW*>(ptr);
     index->hnsw->ef_ = ann_ef;
+    searcher->SetEf(ann_ef);
 }
-
+bool optimize_once = true;
 void ann_search(void* ptr, int n, const float* x, int k, float* distances, int32_t* labels, int num_p) {
     if (!searcher) return;
+
+    num_p *= 20;
+    // if(optimize_once){
+    //     searcher->Optimize(num_p);
+    //     optimize_once = false;
+    // }
 
     #pragma omp parallel for num_threads(num_p)
     for (int i = 0; i < n; ++i) {

@@ -54,7 +54,7 @@ int main() {
   // Generate random dataset.
 
   int dim = 200;
-  int max_elements = 10'000;
+  int max_elements = 100'000;
 
   // Generate random data
   std::mt19937 rng;
