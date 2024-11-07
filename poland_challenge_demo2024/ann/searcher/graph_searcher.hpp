@@ -248,7 +248,12 @@ create_searcher(Graph<int32_t> graph, const std::string &metric,
       printf("Metric not suppported\n");
       return nullptr;
     }
-  } else {
+  } else if (qua == QuantizerType::SQ6){
+    RType ret = std::make_unique<GraphSearcher<SQ6Quantizer<Metric::IP>>>(
+          std::move(graph));
+      return ret;
+  }
+  else {
     printf("Quantizer type not supported\n");
     return nullptr;
   }
