@@ -95,9 +95,9 @@ bench_dot_u8_s8(benchmark::State& s) {
     for (auto& t : x) t &= (1 << 7) - 1;
     for (auto& t : y) t &= (1 << 7) - 1;
 #endif
-    check_int32_equal(helpa::l2_u8_s8_ref(x.data(), y.data(), dim), helpa::l2_u8_s8(x.data(), y.data(), dim));
+    check_int32_equal(helpa::dot_u8_s8_ref(x.data(), y.data(), dim), helpa::dot_u8_s8(x.data(), y.data(), dim));
     for (auto _ : s) {
-        benchmark::DoNotOptimize(helpa::l2_u8_s8(x.data(), y.data(), dim));
+        benchmark::DoNotOptimize(helpa::dot_u8_s8(x.data(), y.data(), dim));
     }
 }
 
@@ -141,4 +141,4 @@ BENCHMARK(bench_l2a_u4_u4);
 BENCHMARK(bench_dot_fp32_fp32);
 BENCHMARK(bench_dot_s8_s8);
 BENCHMARK(bench_dot_u8_s8);
-BENCHMARK(bench_dota_u4_u4);
+// BENCHMARK(bench_dota_u4_u4);
