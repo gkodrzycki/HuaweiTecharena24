@@ -54,7 +54,7 @@ int main() {
   // Generate random dataset.
 
   int dim = 200;
-  int max_elements = 10'000;
+  int max_elements = 2'000'000;
 
   // Generate random data
   std::mt19937 rng;
@@ -66,7 +66,7 @@ int main() {
     data[i] = distrib_real(rng);
   }
 
-  std::string metric = "IP";
+  std::string metric = "L2";
   void* vidx = ann_init(dim, 50, metric.c_str());
 
   // building process
@@ -99,39 +99,62 @@ int main() {
   auto startTime = chrono::steady_clock::now();
   int correct = 0;
 
-  for(int i = 0; i < max_elements; ++i) {
-    // Find the closest vector in IP metric
-    float max_IP = 0;
-    for(int j = 0; j < max_elements; ++j) {
-      if(i == j) continue;
-      float curr_IP = 0;
-      for (int d = 0; d < dim; ++d) {
-        curr_IP += data[i * dim + d] * data[j * dim + d];
-      }
-      if(curr_IP > max_IP) {
-        max_IP = curr_IP;
-        real_closest[i] = j;
-      }
-    }
-  }
+  // for(int i = 0; i < max_elements; ++i) {
+  //   // Find the closest vector in IP metric
+  //   float max_IP = 0;
+  //   for(int j = 0; j < max_elements; ++j) {
+  //     if(i == j) continue;
+  //     float curr_IP = 0;
+  //     for (int d = 0; d < dim; ++d) {
+  //       curr_IP += data[i * dim + d] * data[j * dim + d];
+  //     }
+  //     if(curr_IP > max_IP) {
+  //       max_IP = curr_IP;
+  //       real_closest[i] = j;
+  //     }
+  //   }
+  // }
 
-  for (int i = 0; i < max_elements; ++i) {
-    // Search for this one vector
-    ann_search(vidx, 1, data + i * dim, num_closest, distances, labels, 1);
+  int minEF = 20;
+  int maxEF = 400;
+  int efStep = 10;
+  for (int ef = minEF; ef <= maxEF; ef += efStep) {
+
+    set_ann_ef(vidx, ef);
     
-    if (labels[0] == real_closest[i]) {
-      correct += 1;
+
+    float* distances = new float[num_closest]();
+    int32_t* labels = new int32_t[num_closest]();
+    int32_t* real_closest = new int32_t[max_elements]();
+    double recall = 0;
+    double qps = 0;
+
+    auto startTime = chrono::steady_clock::now();
+    int correct = 0;
+    for (int i = 0; i < max_elements; ++i) {
+      // Search for this one vector
+      ann_search(vidx, 1, data + i * dim, num_closest, distances, labels, 1);
+      
+      if (labels[0] == i) {
+        correct += 1;
+      }
     }
+
+    delete labels;
+    delete real_closest;
+    delete distances;
+
+    auto endTime = chrono::steady_clock::now();
+    auto timeTaken =
+        chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
+    double timeSeconds = (double)timeTaken / 1000 / 1000 / 1000;
+
+    qps = (double)max_elements / timeSeconds;
+    recall = (double)correct / max_elements;
+
+    int peakmem = getMemory_ann();
+    cerr << "EF: " << ef << "\n";
+    cout << "EF: " << ef << "\n";
+    cout << "Recall: " << recall << ", QPS: " << qps << "\n";
   }
-  auto endTime = chrono::steady_clock::now();
-  auto timeTaken =
-      chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
-  double timeSeconds = (double)timeTaken / 1000 / 1000 / 1000;
-
-  qps = (double)max_elements / timeSeconds;
-  recall = (double)correct / max_elements;
-
-  int peakmem = getMemory_ann();
-  cout << "Build time: " << build_time << ", Peak memory : " << peakmem << "\n";
-  cout << "Recall: " << recall << ", QPS: " << qps << "\n";
 }

@@ -95,6 +95,24 @@ create_hnsw(const std::string &metric, const std::string &quantizer = "SQ8U",
       return std::make_unique<HNSW<FP16Quantizer<Metric::IP>>>(dim, R, L);
     }
   }
+
+  if (qua == QuantizerType::SQ8U) {
+    if (m == Metric::L2) {
+      return std::make_unique<HNSW<SQ8QuantizerUniform<Metric::L2>>>(dim, R, L);
+    }
+    if (m == Metric::IP) {
+      return std::make_unique<HNSW<SQ8QuantizerUniform<Metric::IP>>>(dim, R, L);
+    }
+  }
+
+  if (qua == QuantizerType::SQ8P) {
+    if (m == Metric::L2) {
+      return std::make_unique<HNSW<SQ8Quantizer2<Metric::L2>>>(dim, R, L);
+    }
+    if (m == Metric::IP) {
+      return std::make_unique<HNSW<SQ8Quantizer2<Metric::IP>>>(dim, R, L);
+    }
+  }
   // if (qua == QuantizerType::SQ6){
   //   if (m == Metric::L2) {
   //     return std::make_unique<HNSW<SQ6Quantizer<Metric::L2>>>(dim, R, L);

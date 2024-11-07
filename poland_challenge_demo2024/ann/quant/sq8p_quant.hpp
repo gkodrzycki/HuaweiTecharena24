@@ -58,46 +58,32 @@ struct SQ8Quantizer2 : Template {
     return mx;
   }
 
-  struct ComputerType : Computer<Tensor> {
-    using dist_type = float;
-    const bf16 *maxs = nullptr, *norms = nullptr;
-    int8_t *q = nullptr;
-    float mxq = 0.0f;
+  constexpr static auto dist_func =
+      metric == Metric::L2
+          ? [](const int8_t *x, const int8_t *y,
+               const int32_t
+                   d) { return helpa::l2_u8_s8((const uint8_t *)x, y, d); }
+          : [](const int8_t *x, const int8_t *y, const int32_t d) {
+              return helpa::dota_u8_s8_256((const uint8_t *)x, y);
+            };
 
-    ComputerType(const Tensor &tensor, const float *query, const auto &encoder,
-                 const bf16 *maxs, const bf16 *norms)
-        : Computer<Tensor>(tensor), maxs(maxs), norms(norms) {
-      encoder(query, q);
-      for (int i = 0; i < tensor.dim(); ++i) {
-        mxq = std::max(mxq, std::abs(query[i]));
-      }
-    }
+  constexpr static auto dist_func_sym = dist_func;
 
-    ~ComputerType() { free(q); }
-
-    ann_INLINE float operator()(int32_t u) const {
-      dist_type sum;
-      auto dot = helpa::dot_s8_s8(q, (const int8_t *)this->tensor.get(u),
-                                  this->tensor.dim_align()) *
-                 float(maxs[u]) * mxq / ncount / ncount;
-      if constexpr (metric == Metric::L2) {
-        sum = float(norms[u]) + 2 * dot;
-      } else {
-        sum = dot;
-      }
-      return sum;
-    }
-  };
+  using ComputerType =
+      ComputerImpl<Tensor, dist_func, int32_t, float, int8_t, int8_t>;
+  using SymComputerType =
+      SymComputerImpl<Tensor, dist_func_sym, int32_t, int8_t>;
 
   auto get_computer(const float *query) const {
-    return ComputerType(
-        this->storage, query,
-        [this](const float *from, data_type *&to) {
-          to = (data_type *)align_alloc(this->code_size());
-          this->encode(from, to);
-        },
-        maxs.data(), norms.data());
+    return ComputerType(this->storage, query,
+                        [this](const float *from, data_type *&to) {
+                          to = (data_type *)align_alloc(this->code_size());
+                          this->encode(from, to);
+                        });
   }
+
+  auto get_sym_computer() const { return SymComputerType(this->storage); }
+
 };
 
 } // namespace ann
