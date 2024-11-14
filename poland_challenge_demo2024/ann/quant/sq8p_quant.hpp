@@ -34,7 +34,7 @@ struct SQ8Quantizer2 : Template {
     if constexpr (metric == Metric::L2) {
       norms.resize(n);
     }
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
     for (int32_t i = 0; i < n; ++i) {
       const float *vec = data + (int64_t)i * this->dim();
       maxs[i] = bf16(encode(vec, (data_type *)this->get_code(i)));

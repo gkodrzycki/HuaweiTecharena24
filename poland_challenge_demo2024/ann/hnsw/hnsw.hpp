@@ -29,12 +29,13 @@ template <SymComputableQuantConcept QuantType> struct HNSW : public Builder {
     nb = N;
     quant.train(data, N);
     quant.add(data, N);
+
     hnsw = std::make_unique<HierarchicalNSW<QuantType>>(quant, N, R / 2,
                                                         efConstruction);
     std::atomic<int32_t> cnt{0};
     auto st = std::chrono::high_resolution_clock::now();
     hnsw->addPoint(0);
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
     for (int32_t i = 1; i < nb; ++i) {
       hnsw->addPoint(i);
       int32_t cur = cnt += 1;
@@ -44,9 +45,8 @@ template <SymComputableQuantConcept QuantType> struct HNSW : public Builder {
     }
     auto ed = std::chrono::high_resolution_clock::now();
     auto ela = std::chrono::duration<double>(ed - st).count();
-    //printf("HNSW building cost: %.2lfs\n", ela);
     final_graph.init(nb, R);
-#pragma omp parallel for
+#pragma omp parallel for num_threads(96)
     for (int64_t i = 0; i < nb; ++i) {
       int32_t *edges = (int32_t *)hnsw->get_linklist0(i);
       for (int j = 1; j <= edges[0]; ++j) {
@@ -96,7 +96,7 @@ create_hnsw(const std::string &metric, const std::string &quantizer = "SQ8U",
     }
   }
 
-  if (qua == QuantizerType::SQ8U) {
+   if (qua == QuantizerType::SQ8U) {
     if (m == Metric::L2) {
       return std::make_unique<HNSW<SQ8QuantizerUniform<Metric::L2>>>(dim, R, L);
     }
@@ -113,12 +113,17 @@ create_hnsw(const std::string &metric, const std::string &quantizer = "SQ8U",
       return std::make_unique<HNSW<SQ8Quantizer2<Metric::IP>>>(dim, R, L);
     }
   }
-  // if (qua == QuantizerType::SQ6){
-  //   if (m == Metric::L2) {
-  //     return std::make_unique<HNSW<SQ6Quantizer<Metric::L2>>>(dim, R, L);
-  //   }
+  if (qua == QuantizerType::SQ4U) {
+    if (m == Metric::L2) {
+      return std::make_unique<HNSW<SQ4QuantizerUniform<Metric::L2>>>(dim, R, L);
+    }
+    if (m == Metric::IP) {
+      return std::make_unique<HNSW<SQ4QuantizerUniform<Metric::IP>>>(dim, R, L);
+    }
+  }
+  // if (qua == QuantizerType::SQ8) {
   //   if (m == Metric::IP) {
-  //     return std::make_unique<HNSW<SQ6Quantizer<Metric::IP>>>(dim, R, L);
+  //     return std::make_unique<HNSW<SQ8Quantizer<Metric::IP>>>(dim, R, L);
   //   }
   // }
 

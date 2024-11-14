@@ -3,6 +3,7 @@
 #include <atomic>
 #include <random>
 #include <stack>
+#include <iostream>
 
 #include "ann/builder.hpp"
 #include "ann/graph.hpp"
@@ -49,6 +50,7 @@ struct NSG : public Builder {
   }
 
   void Build(float *data, int n) override {
+    std::cerr << "wtf?\n";
     this->nb = n;
     this->data = data;
     NNDescent nnd(d, metric);
@@ -66,7 +68,7 @@ struct NSG : public Builder {
       final_graph.init(n, R);
       std::fill_n(final_graph.data, n * R, EMPTY_ID);
       final_graph.eps = {ep};
-#pragma omp parallel for
+#pragma omp parallel for num_threads(96)
       for (int i = 0; i < n; i++) {
         int cnt = 0;
         for (int j = 0; j < R; j++) {

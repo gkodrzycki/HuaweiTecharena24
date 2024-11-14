@@ -202,7 +202,7 @@ private:
   std::vector<float> compute_dist(const Tensor &tensor) const {
     int n = tensor.size();
     std::vector<float> dists(n * n_cluster);
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
     for (int i = 0; i < n; ++i) {
       ComputerType computer(medoids, (const float *)tensor.get(i), MemCpyTag{});
       for (int j = 0; j < n_cluster; ++j) {
@@ -217,7 +217,7 @@ private:
     double loss = 0.0;
     int32_t n = tensor.size();
     std::vector<int32_t> idx(n);
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
     for (int i = 0; i < n; ++i) {
       float min_dist = HUGE_VALF;
       int32_t min_id = -1;

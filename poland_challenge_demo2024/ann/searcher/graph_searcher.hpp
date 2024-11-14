@@ -56,7 +56,7 @@ namespace ann
     int32_t graph_po = 1;
 
     // Optimization parameters
-    constexpr static int32_t kOptimizePoints = 1000;
+    constexpr static int32_t kOptimizePoints = 50000;
     constexpr static int32_t kTryPos = 10;
     constexpr static int32_t kTryPls = 10;
     constexpr static int32_t kTryK = 10;
@@ -89,6 +89,8 @@ namespace ann
         memcpy(optimize_queries.data() + (int64_t)i * d,
                data + (int64_t)sample_points[i] * d, d * sizeof(float));
       }
+
+      // Optimize();
     }
 
     void SetEf(int32_t ef) override { this->ef = ef; }
@@ -106,9 +108,10 @@ namespace ann
 
       auto f = [&]
       {
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
         for (int32_t i = 0; i < sample_points_num; ++i)
         {
+          // printf("%d  %d\n", i, sample_points_num);
           Search(optimize_queries.data() + (int64_t)i * d, kTryK,
                  dummy_dst.data());
         }
@@ -187,7 +190,7 @@ namespace ann
     void SearchBatch(const float *q, int32_t nq, int32_t k, int32_t *ids,
                      float *dis = nullptr) const override
     {
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
       for (int i = 0; i < nq; ++i)
       {
         Search(q + i * d, k, ids + i * k, dis ? dis + i * k : nullptr);
@@ -275,6 +278,38 @@ namespace ann
         return nullptr;
       }
     }
+    else if (qua == QuantizerType::SQ4U)
+    {
+      if (m == Metric::IP)
+      {
+        RType ret =
+            std::make_unique<GraphSearcher<SQ4QuantizerUniform<Metric::IP>>>(
+                std::move(graph));
+        if (params::SQ4U_REFINE)
+        {
+          ret = std::make_unique<Refiner<params::RefineQuantizer<Metric::IP>>>(
+              std::move(ret), params::SQ4U_REFINE_FACTOR);
+        }
+        return ret;
+      }
+      else if (m == Metric::L2)
+      {
+        RType ret =
+            std::make_unique<GraphSearcher<SQ4QuantizerUniform<Metric::L2>>>(
+                std::move(graph));
+        if (params::SQ4U_REFINE)
+        {
+          ret = std::make_unique<Refiner<params::RefineQuantizer<Metric::L2>>>(
+              std::move(ret), params::SQ4U_REFINE_FACTOR);
+        }
+        return ret;
+      }
+      else
+      {
+        printf("Metric not suppported\n");
+        return nullptr;
+      }
+    }
     else if (qua == QuantizerType::FP32)
     {
       if (m == Metric::IP)
@@ -284,6 +319,43 @@ namespace ann
         return ret;
       }
       else
+      {
+        printf("Metric not suppported\n");
+        return nullptr;
+      }
+    }
+    // else if (qua == QuantizerType::SQ8)
+    // {
+    //   if (m == Metric::IP)
+    //   {
+    //     RType ret = std::make_unique<GraphSearcher<SQ8Quantizer<Metric::IP>>>(
+    //         std::move(graph));
+    //     if (params::SQ8_REFINE) {
+    //       ret = std::make_unique<Refiner<params::RefineQuantizer<Metric::IP>>>(
+    //           std::move(ret), params::SQ8_REFINE_FACTOR);
+    //     }
+    //     return ret;
+    //   }
+    //   else
+    //   {
+    //     printf("Metric not suppported\n");
+    //     return nullptr;
+    //   }
+    // }
+    else if (qua == QuantizerType::FP16)
+    {
+      if (m == Metric::IP)
+      {
+        RType ret = std::make_unique<GraphSearcher<FP16Quantizer<Metric::IP>>>(
+            std::move(graph));
+        return ret;
+      }
+      else if (m == Metric::L2) 
+      {
+        RType ret = std::make_unique<GraphSearcher<FP16Quantizer<Metric::L2>>>(
+            std::move(graph));
+        return ret;
+      } else 
       {
         printf("Metric not suppported\n");
         return nullptr;
@@ -301,6 +373,11 @@ namespace ann
       {
         RType ret = std::make_unique<GraphSearcher<SQ8Quantizer2<Metric::IP>>>(
             std::move(graph));
+        if(params::SQ8P_REFINE)
+        {
+          ret = std::make_unique<Refiner<params::RefineQuantizer<Metric::IP>>>(
+              std::move(ret), params::SQ8P_REFINE_FACTOR);
+        }
         return ret;
       }
       else if (m == Metric::L2)

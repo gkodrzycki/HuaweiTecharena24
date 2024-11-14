@@ -34,7 +34,7 @@ struct SQ8Quantizer : Template {
 
   void add(const float *data, int32_t n) {
     this->storage.init(n);
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for num_threads(96)
     for (int64_t i = 0; i < n; ++i) {
       encode(data + i * this->dim(), (data_type *)this->get_code(i));
     }
@@ -55,13 +55,21 @@ struct SQ8Quantizer : Template {
   constexpr static auto dist_func =
       metric == Metric::L2 ? L2SqrSQ8_ext : IPSQ8_ext;
 
+  constexpr static auto dist_func_sym = dist_func;
+
+
   using ComputerType = ComputerImpl<Tensor, dist_func, float, float, float,
                                     uint8_t, const float *, const float *>;
 
+  using SymComputerType =
+      SymComputerImpl<Tensor, dist_func_sym, float, float, uint8_t>;
   auto get_computer(const float *query) const {
     return ComputerType(this->storage, query, MemCpyTag{},
                         calibrator.mins.data(), calibrator.difs.data());
   }
+
+  auto get_sym_computer() const { return SymComputerType(this->storage); }
+
 };
 
 } // namespace ann

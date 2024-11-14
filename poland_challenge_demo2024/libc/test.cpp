@@ -54,7 +54,7 @@ int main() {
   // Generate random dataset.
 
   int dim = 200;
-  int max_elements = 2'000'000;
+  int max_elements = 10'000;
 
   // Generate random data
   std::mt19937 rng;
@@ -66,7 +66,7 @@ int main() {
     data[i] = distrib_real(rng);
   }
 
-  std::string metric = "L2";
+  std::string metric = "IP";
   void* vidx = ann_init(dim, 50, metric.c_str());
 
   // building process
@@ -99,25 +99,30 @@ int main() {
   auto startTime = chrono::steady_clock::now();
   int correct = 0;
 
-  // for(int i = 0; i < max_elements; ++i) {
-  //   // Find the closest vector in IP metric
-  //   float max_IP = 0;
-  //   for(int j = 0; j < max_elements; ++j) {
-  //     if(i == j) continue;
-  //     float curr_IP = 0;
-  //     for (int d = 0; d < dim; ++d) {
-  //       curr_IP += data[i * dim + d] * data[j * dim + d];
-  //     }
-  //     if(curr_IP > max_IP) {
-  //       max_IP = curr_IP;
-  //       real_closest[i] = j;
-  //     }
-  //   }
-  // }
+  for(int i = 0; i < max_elements; ++i) {
+    // Find the closest vector in IP metric
 
-  int minEF = 20;
+    if(metric == "IP") {
+      float max_IP = 0;
+      for(int j = 0; j < max_elements; ++j) {
+        // if(i == j) continue;
+        float curr_IP = 0;
+        for (int d = 0; d < dim; ++d) {
+          curr_IP += data[i * dim + d] * data[j * dim + d];
+        }
+        if(curr_IP > max_IP) {
+          max_IP = curr_IP;
+          real_closest[i] = j;
+        }
+      }
+    } else {
+      real_closest[i] = i;
+    }
+  }
+
+  int minEF = 100;
   int maxEF = 400;
-  int efStep = 10;
+  int efStep = 50;
   for (int ef = minEF; ef <= maxEF; ef += efStep) {
 
     set_ann_ef(vidx, ef);
@@ -125,7 +130,6 @@ int main() {
 
     float* distances = new float[num_closest]();
     int32_t* labels = new int32_t[num_closest]();
-    int32_t* real_closest = new int32_t[max_elements]();
     double recall = 0;
     double qps = 0;
 
@@ -135,13 +139,12 @@ int main() {
       // Search for this one vector
       ann_search(vidx, 1, data + i * dim, num_closest, distances, labels, 1);
       
-      if (labels[0] == i) {
+      if (labels[0] == real_closest[i]) {
         correct += 1;
       }
     }
 
     delete labels;
-    delete real_closest;
     delete distances;
 
     auto endTime = chrono::steady_clock::now();
