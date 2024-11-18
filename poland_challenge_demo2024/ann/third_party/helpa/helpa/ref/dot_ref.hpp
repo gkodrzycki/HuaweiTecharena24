@@ -8,6 +8,7 @@ inline float dot_fp32_fp32_ref(const float *x, const float *y,
                                const int32_t d) {
   auto ans = 0.0f;
   for (int32_t i = 0; i < d; ++i) {
+    // printf("ii: %d\n", i);
     ans += x[i] * y[i];
   }
   return -ans;

@@ -60,7 +60,9 @@ struct SQ4QuantizerUniform : Template {
     }
   }
 
+  // constexpr static auto dist_func = (metric == Metric::L2) ? helpa::l2a_u4_u4 : helpa::dota_u4_u4;
   constexpr static auto dist_func = helpa::l2a_u4_u4;
+
 
   constexpr static auto dist_func_sym = dist_func;
 

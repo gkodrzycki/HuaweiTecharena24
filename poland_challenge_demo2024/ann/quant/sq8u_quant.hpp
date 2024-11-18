@@ -33,7 +33,7 @@ struct SQ8QuantizerUniform : Template {
 
   void add(const float *data, int32_t n) {
     this->storage.init(n);
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int64_t i = 0; i < n; ++i) {
       encode(data + i * this->dim(), (data_type *)this->get_code(i));
     }
@@ -60,7 +60,7 @@ struct SQ8QuantizerUniform : Template {
                const int32_t
                    d) { return helpa::l2_u8_s8((const uint8_t *)x, y, d); }
           : [](const int8_t *x, const int8_t *y, const int32_t d) {
-              return helpa::dota_u8_s8_256((const uint8_t *)x, y);
+              return helpa::dota_u8_s8((const uint8_t *)x, y, d);
             };
 
   constexpr static auto dist_func_sym = dist_func;

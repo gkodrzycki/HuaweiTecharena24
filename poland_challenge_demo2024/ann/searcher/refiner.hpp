@@ -77,7 +77,7 @@ template <QuantConcept QuantType> struct Refiner : GraphSearcherBase {
     std::vector<int32_t> ret(nq * reorder_k);
     inner->SearchBatch(q, nq, reorder_k, ret.data());
     {
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
       for (int32_t i = 0; i < nq; ++i) {
         const float *cur_q = q + i * dim;
         const int32_t *cur_ret = &ret[i * reorder_k];

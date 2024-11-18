@@ -11,6 +11,12 @@
 #include "ann/utils.hpp"
 #include "nndescent.hpp"
 
+int nndescent_iter = 15;
+int nndescent_GK = 200;
+int nndescent_S = 10;
+int nndescent_R = 100;
+int nndescent_L = 200;
+
 namespace ann {
 
 struct NSG : public Builder {
@@ -42,15 +48,14 @@ struct NSG : public Builder {
         return helpa::dot_fp32_fp32(x, y, d);
       };
     }
-    this->GK = 64;
-    this->nndescent_S = 10;
-    this->nndescent_R = 100;
-    this->nndescent_L = this->GK + 50;
-    this->nndescent_iter = 10;
+    this->GK = nndescent_GK;
+    this->nndescent_S = nndescent_S;
+    this->nndescent_R = nndescent_R;
+    this->nndescent_L = nndescent_L;
+    this->nndescent_iter = nndescent_iter;
   }
 
   void Build(float *data, int n) override {
-    std::cerr << "wtf?\n";
     this->nb = n;
     this->data = data;
     NNDescent nnd(d, metric);
@@ -58,6 +63,7 @@ struct NSG : public Builder {
     nnd.R = nndescent_R;
     nnd.L = nndescent_L;
     nnd.iters = nndescent_iter;
+
     nnd.Build(data, n, GK);
     const auto &knng = nnd.final_graph;
     Init(knng);
@@ -68,7 +74,7 @@ struct NSG : public Builder {
       final_graph.init(n, R);
       std::fill_n(final_graph.data, n * R, EMPTY_ID);
       final_graph.eps = {ep};
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
       for (int i = 0; i < n; i++) {
         int cnt = 0;
         for (int j = 0; j < R; j++) {
@@ -352,9 +358,14 @@ struct NSG : public Builder {
       if (cnt >= nb) {
         break;
       }
+      std::cerr << cnt << " " << nb << std::endl;
       std::vector<bool> vis2(nb);
       root = attach_unlinked(vis, vis2, degrees);
       num_attached += 1;
+      if(root == -1) {
+        std::cerr << "escape\n";
+        break;
+      } 
     }
     return num_attached;
   }
@@ -418,11 +429,30 @@ struct NSG : public Builder {
       }
     }
     if (!found) {
+      int cnt = 0;
       do {
         node = rng.rand_int(nb);
+        cnt++;
+        // std::cerr << "Random select " << node << "cnt " << cnt++ << std::endl;
         if (vis[node] && degrees[node] < R && node != id) {
           found = true;
         }
+
+        if(cnt > 10000) {
+          std::cerr << "aha\n";
+          for (node = 0; node < nb; node++) {
+            
+            std::cerr << "aha2 " << node << "\n";
+
+            if (vis[node] && degrees[node] < R && node != id) {
+              found = true;
+              break;
+            }
+          }
+          if(found) break;
+          return -1;
+        }
+
       } while (!found);
     }
     int pos = degrees[node];

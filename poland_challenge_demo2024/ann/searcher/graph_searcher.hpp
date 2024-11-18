@@ -28,8 +28,8 @@ namespace ann
 
     constexpr inline int32_t SQ8_REFINE_FACTOR = 10;
     constexpr inline int32_t SQ8U_REFINE_FACTOR = 2;
-    constexpr inline int32_t SQ8P_REFINE_FACTOR = 10;
-    constexpr inline int32_t SQ4U_REFINE_FACTOR = 10;
+    constexpr inline int32_t SQ8P_REFINE_FACTOR = 2;
+    constexpr inline int32_t SQ4U_REFINE_FACTOR = 2;
     constexpr inline int32_t SQ4UA_REFINE_FACTOR = 10;
     constexpr inline int32_t PQ8_REFINE_FACTOR = 10;
 
@@ -56,7 +56,7 @@ namespace ann
     int32_t graph_po = 1;
 
     // Optimization parameters
-    constexpr static int32_t kOptimizePoints = 50000;
+    constexpr static int32_t kOptimizePoints = 300000;
     constexpr static int32_t kTryPos = 10;
     constexpr static int32_t kTryPls = 10;
     constexpr static int32_t kTryK = 10;
@@ -108,7 +108,7 @@ namespace ann
 
       auto f = [&]
       {
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
         for (int32_t i = 0; i < sample_points_num; ++i)
         {
           // printf("%d  %d\n", i, sample_points_num);
@@ -190,7 +190,7 @@ namespace ann
     void SearchBatch(const float *q, int32_t nq, int32_t k, int32_t *ids,
                      float *dis = nullptr) const override
     {
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
       for (int i = 0; i < nq; ++i)
       {
         Search(q + i * d, k, ids + i * k, dis ? dis + i * k : nullptr);
@@ -246,6 +246,18 @@ namespace ann
     auto m = metric_map[metric];
     auto qua = quantizer_map[quantizer];
 
+    if (qua == QuantizerType::PQ8) {
+      if( m == Metric::IP) {
+        RType ret = std::make_unique<GraphSearcher<ProductQuant<Metric::IP>>>(std::move(graph));
+        if(params::PQ8_REFINE) {
+          ret = std::make_unique<Refiner<params::RefineQuantizer<Metric::IP>>>(std::move(ret), params::PQ8_REFINE_FACTOR);
+        }
+        return ret;
+      } else {
+        printf("Metric not suppported\n");
+        return nullptr;
+      }
+    }
     if (qua == QuantizerType::SQ8U)
     {
       if (m == Metric::IP)
@@ -324,24 +336,6 @@ namespace ann
         return nullptr;
       }
     }
-    // else if (qua == QuantizerType::SQ8)
-    // {
-    //   if (m == Metric::IP)
-    //   {
-    //     RType ret = std::make_unique<GraphSearcher<SQ8Quantizer<Metric::IP>>>(
-    //         std::move(graph));
-    //     if (params::SQ8_REFINE) {
-    //       ret = std::make_unique<Refiner<params::RefineQuantizer<Metric::IP>>>(
-    //           std::move(ret), params::SQ8_REFINE_FACTOR);
-    //     }
-    //     return ret;
-    //   }
-    //   else
-    //   {
-    //     printf("Metric not suppported\n");
-    //     return nullptr;
-    //   }
-    // }
     else if (qua == QuantizerType::FP16)
     {
       if (m == Metric::IP)

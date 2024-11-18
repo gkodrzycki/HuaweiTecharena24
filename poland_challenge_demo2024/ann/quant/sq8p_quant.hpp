@@ -34,7 +34,7 @@ struct SQ8Quantizer2 : Template {
     if constexpr (metric == Metric::L2) {
       norms.resize(n);
     }
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int32_t i = 0; i < n; ++i) {
       const float *vec = data + (int64_t)i * this->dim();
       maxs[i] = bf16(encode(vec, (data_type *)this->get_code(i)));
@@ -64,7 +64,7 @@ struct SQ8Quantizer2 : Template {
                const int32_t
                    d) { return helpa::l2_u8_s8((const uint8_t *)x, y, d); }
           : [](const int8_t *x, const int8_t *y, const int32_t d) {
-              return helpa::dota_u8_s8_256((const uint8_t *)x, y);
+              return helpa::dota_u8_s8((const uint8_t *)x, y, d);
             };
 
   constexpr static auto dist_func_sym = dist_func;

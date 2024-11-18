@@ -1,15 +1,15 @@
-/*20240108 w00678802*/
 #include <bits/stdc++.h>
+
+#include <filesystem>
+#include <iostream>
+
+#include "ann/third_party/helpa/helpa/core.hpp"
 
 using namespace std;
 
-// #if defined(__aarch64__)
-// #include "hdf5.h"
-// #else
-// #include <hdf5.h>
-// #endif
 #include "../ann/memory.hpp"
 #include "ann.h"
+#include "ann/neighbor.hpp"
 
 /*
  * Measures the current (and peak) resident and virtual memories
@@ -50,23 +50,153 @@ int getMemory_ann() {
   return peakVirtMem;  // KB
 }
 
-int main() {
-  // Generate random dataset.
+int intersect(int* a1, int* a2, int l1, int l2, int index) {
+  int res = 0;
+  for (int i = 0; i < l1; i++) {
+    if (a1[i] < 0) {
+      continue;
+    }
 
-  int dim = 200;
-  int max_elements = 10'000;
+    for (int j = 0; j < l2; j++) {
+      if ((j > 0) && (a2[j] == a2[j - 1])) continue;
+      if (a1[i] == a2[j]) {
+        res++;
+        break;
+      }
+    }
+  }
+  return res;
+}
 
-  // Generate random data
-  std::mt19937 rng;
-  rng.seed(47);
-  std::uniform_real_distribution<> distrib_real;
+const std::string metric = "IP";
+const int dim = 200;
+const int num_elements = 50'000;
+const int num_closest = 10;
+const int num_queries = 5'000;
+const int seed = 47;
 
-  float* data = new float[dim * max_elements];
-  for (int i = 0; i < dim * max_elements; i++) {
-    data[i] = distrib_real(rng);
+struct QueueData {
+  float dist;
+  int id;
+
+  bool operator<(const QueueData& other) const {
+    if (dist != other.dist) {
+      return dist < other.dist;
+    }
+    return id < other.id;
+  }
+};
+
+struct Dataset {
+  std::vector<float> data;
+  std::vector<float> queries_data;
+  std::vector<int> closest;
+
+  static Dataset Create() {
+    Dataset dataset;
+    dataset.data.resize(num_elements * dim);
+    dataset.queries_data.resize(num_queries * dim);
+    dataset.closest.resize(num_queries * num_closest);
+
+    // Generate random data
+    std::mt19937 rng;
+    rng.seed(47);
+    std::uniform_real_distribution<> distrib_real(-10., 10.);
+
+    for (auto& i : dataset.data) {
+      i = distrib_real(rng);
+    }
+    for (auto& i : dataset.queries_data) {
+      i = distrib_real(rng);
+    }
+
+    // Generate closest
+
+    auto dist_func =
+        (metric == "L2" ? helpa::l2_fp32_fp32 : helpa::dot_fp32_fp32);
+    float* data = dataset.data.data();
+    float* queries_data = dataset.queries_data.data();
+
+#pragma omp parallel for num_threads(6)
+    for (int i = 0; i < num_queries; ++i) {
+      std::priority_queue<QueueData> Q;
+
+      for (int j = 0; j < num_elements; ++j) {
+        const float dist =
+            dist_func(queries_data + i * dim, data + j * dim, dim);
+        Q.push({dist, j});
+        if (Q.size() > num_closest) {
+          // Remove the node with the highest dist
+          Q.pop();
+        }
+      }
+
+      // Reverse the order as the highest dist is on top.
+      for (int j = num_closest - 1; j >= 0; --j) {
+        dataset.closest[i * num_closest + j] = Q.top().id;
+        Q.pop();
+      }
+    }
+
+    return dataset;
   }
 
-  std::string metric = "IP";
+  static Dataset Read(std::string filename) {
+    std::cerr << "Reading the dataset from: " + filename << "\n";
+    Dataset dataset;
+    dataset.data.resize(num_elements * dim);
+    dataset.queries_data.resize(num_queries * dim);
+    dataset.closest.resize(num_queries * num_closest);
+
+    std::ifstream file(filename, std::ios::in | std::ios::binary);
+    if (!file.good()) {
+      std::cerr << "Something not good with file: " << filename << "\n";
+      exit(1);
+    }
+
+    file.read(reinterpret_cast<char*>(dataset.data.data()),
+              sizeof(float) * dataset.data.size());
+    file.read(reinterpret_cast<char*>(dataset.queries_data.data()),
+              sizeof(float) * dataset.queries_data.size());
+    file.read(reinterpret_cast<char*>(dataset.closest.data()),
+              sizeof(int) * dataset.closest.size());
+    file.close();
+    return dataset;
+  }
+
+  void Save(std::string filename) {
+    std::cerr << "Saving the dataset to file: " + filename << "\n";
+    std::ofstream file(filename, std::ios::out | std::ios::binary);
+    if (!file.good()) {
+      std::cerr << "Something not good with file: " << filename << "\n";
+      exit(1);
+    }
+
+    file.write(reinterpret_cast<const char*>(data.data()),
+               sizeof(float) * data.size());
+    file.write(reinterpret_cast<const char*>(queries_data.data()),
+               sizeof(float) * queries_data.size());
+    file.write(reinterpret_cast<const char*>(closest.data()),
+               sizeof(int) * closest.size());
+    file.close();
+  }
+};
+
+Dataset GetDataset() {
+  std::string filename = metric + ".bin";
+
+  if (std::filesystem::exists(filename)) {
+    return Dataset::Read(filename);
+  }
+
+  Dataset dataset = Dataset::Create();
+  dataset.Save(filename);
+  return dataset;
+}
+
+int main() {
+  auto dataset = GetDataset();
+
   void* vidx = ann_init(dim, 50, metric.c_str());
 
   // building process
@@ -76,9 +206,8 @@ int main() {
     auto startTime = chrono::steady_clock::now();
 
     // Add data to index
-    cout << "HERE\n";
-    ann_add(vidx, max_elements, data, nullptr);
-    cout << "HERE2\n";
+    ann_add(vidx, num_elements, dataset.data.data(), nullptr);
+
     auto endTime = chrono::steady_clock::now();
     auto timeTaken =
         chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
@@ -87,77 +216,44 @@ int main() {
               << "s\n";
   }
 
-  int num_closest = 1;
-
   printf("searching process test: \n");
-  float* distances = new float[num_closest]();
-  int32_t* labels = new int32_t[num_closest]();
-  int32_t* real_closest = new int32_t[max_elements]();
-  double recall = 0;
-  double qps = 0;
+  float* distances = new float[num_queries * num_closest]();
+  int32_t* labels = new int32_t[num_queries * num_closest]();
 
-  auto startTime = chrono::steady_clock::now();
-  int correct = 0;
-
-  for(int i = 0; i < max_elements; ++i) {
-    // Find the closest vector in IP metric
-
-    if(metric == "IP") {
-      float max_IP = 0;
-      for(int j = 0; j < max_elements; ++j) {
-        // if(i == j) continue;
-        float curr_IP = 0;
-        for (int d = 0; d < dim; ++d) {
-          curr_IP += data[i * dim + d] * data[j * dim + d];
-        }
-        if(curr_IP > max_IP) {
-          max_IP = curr_IP;
-          real_closest[i] = j;
-        }
-      }
-    } else {
-      real_closest[i] = i;
-    }
-  }
-
-  int minEF = 100;
-  int maxEF = 400;
-  int efStep = 50;
-  for (int ef = minEF; ef <= maxEF; ef += efStep) {
-
-    set_ann_ef(vidx, ef);
-    
-
-    float* distances = new float[num_closest]();
-    int32_t* labels = new int32_t[num_closest]();
+  for (int ef : {100, 150, 200}) {
     double recall = 0;
     double qps = 0;
 
-    auto startTime = chrono::steady_clock::now();
-    int correct = 0;
-    for (int i = 0; i < max_elements; ++i) {
-      // Search for this one vector
-      ann_search(vidx, 1, data + i * dim, num_closest, distances, labels, 1);
-      
-      if (labels[0] == real_closest[i]) {
-        correct += 1;
-      }
+    set_ann_ef(vidx, ef);
+    double best_time = 1e9;
+    // TODO: maybe change max_iter to 3
+    const int max_iter = 1;
+    for (int iter = 0; iter < max_iter; ++iter) {
+      auto startTime = chrono::steady_clock::now();
+      ann_search(vidx, num_queries, dataset.queries_data.data(), num_closest,
+                 distances, labels, /*num_p=*/8);
+      auto endTime = chrono::steady_clock::now();
+      auto timeTaken =
+          chrono::duration_cast<chrono::nanoseconds>(endTime - startTime)
+              .count();
+      double timeSeconds = (double)timeTaken / 1000 / 1000 / 1000;
+      best_time = std::min(best_time, timeSeconds);
     }
 
-    delete labels;
-    delete distances;
+    int found = 0;
+    for (int i = 0; i < num_queries; ++i) {
+      found += intersect(dataset.closest.data() + i * num_closest,
+                         labels + i * num_closest, num_closest, num_closest, i);
+    }
 
-    auto endTime = chrono::steady_clock::now();
-    auto timeTaken =
-        chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
-    double timeSeconds = (double)timeTaken / 1000 / 1000 / 1000;
+    qps = (double)num_queries / best_time;
+    recall = (double)found / (num_queries * num_closest);
 
-    qps = (double)max_elements / timeSeconds;
-    recall = (double)correct / max_elements;
-
+    std::cout << "*************************************\n";
+    std::cout << "EF: " << ef << "\n";
     int peakmem = getMemory_ann();
-    cerr << "EF: " << ef << "\n";
-    cout << "EF: " << ef << "\n";
+    cout << "Build time: " << build_time << ", Peak memory : " << peakmem
+         << "\n";
     cout << "Recall: " << recall << ", QPS: " << qps << "\n";
   }
 }

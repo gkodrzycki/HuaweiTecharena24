@@ -4,9 +4,11 @@
 #include <iostream>
 
 #include "ann/builder.hpp"
+#include "ann/nsg/nsg.hpp"
 #include "ann/hnsw/hnsw.hpp"
 #include "ann/searcher/graph_searcher.hpp"
 
+using IndexNSG = ann::NSG;
 std::unique_ptr<ann::GraphSearcherBase> searcher;
 std::unique_ptr<ann::Builder> graph_builder;
 
@@ -16,7 +18,9 @@ std::string metrica = "";
 std::string quant_build = "";
 std::string quant_search = "";
 
-#define num_of_threads 96
+
+
+bool is_load = 0;
 
 void* ann_init(int K_features, int R, const char* metric) {
     dimension = K_features;
@@ -25,19 +29,25 @@ void* ann_init(int K_features, int R, const char* metric) {
     int annR, annL;
 
     if(metrica == "L2") {
-        annR = 50;
+        annR = 100;
         annL = 200;
         quant_build = "SQ4U";
         quant_search = "SQ4U";
+        graph_builder = ann::create_hnsw(metrica, quant_build, dimension, annR, annL);
     } 
     else {
-        annR = 50;
+        annR = 100;
         annL = 200;
-        quant_build = "SQ8P";
-        quant_search = "SQ8P";
+        quant_build = "SQ4U";
+        quant_search = "SQ8U";
+
+        graph_builder = std::unique_ptr<IndexNSG>(
+            new IndexNSG(dimension, metrica, annR, annL)
+        );
+
+        // graph_builder = ann::create_hnsw(metrica, quant_build, dimension, annR, annL);
     } 
 
-    graph_builder = ann::create_hnsw(metric, quant_build, dimension, annR, annL);
 
     return graph_builder.get();
 }
@@ -48,7 +58,13 @@ void ann_free(void* ptr) {
 }
 
 void ann_add(void* ptr, int n, float* x, const char* store) {
-    graph_builder->Build(x, n);
+
+    std::cerr << "Building the index\n";
+    if(!is_load) {
+        graph_builder->Build(x, n);
+    }
+
+    std::cerr << "Graph is built\n";
 
     auto graph = graph_builder->GetGraph();
 
@@ -68,16 +84,13 @@ void ann_add(void* ptr, int n, float* x, const char* store) {
 }
 
 void set_ann_ef(void* ptr, int ann_ef) {
-    if(metrica == "IP") 
-        ann_ef /= 2;
     searcher->SetEf(ann_ef);
 }
 
-bool optimize_once = true;
 void ann_search(void* ptr, int n, const float* x, int k, float* distances, int32_t* labels, int num_p) {
     if (!searcher) return;
 
-    #pragma omp parallel for num_threads(num_of_threads)
+    #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < n; ++i) {
         const float* query = x + i * dimension; 
         float* dist_ptr = distances + i * k;
@@ -88,6 +101,8 @@ void ann_search(void* ptr, int n, const float* x, int k, float* distances, int32
 
 void ann_load(void* ptr, const char* path) {
     graph_builder->GetGraph().load(std::string(path));
+    is_load = 1;
+
 }
 
 void ann_save(void* ptr, const char* path) {

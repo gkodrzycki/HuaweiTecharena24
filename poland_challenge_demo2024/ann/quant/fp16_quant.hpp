@@ -25,7 +25,7 @@ struct FP16Quantizer : Template {
 
   void add(const float *data, int32_t n) {
     this->storage.init(n);
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int64_t i = 0; i < n; ++i) {
       encode(data + i * this->dim(), (data_type *)this->get_code(i));
     }

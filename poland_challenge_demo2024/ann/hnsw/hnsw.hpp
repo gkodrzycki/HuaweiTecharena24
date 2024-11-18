@@ -35,7 +35,7 @@ template <SymComputableQuantConcept QuantType> struct HNSW : public Builder {
     std::atomic<int32_t> cnt{0};
     auto st = std::chrono::high_resolution_clock::now();
     hnsw->addPoint(0);
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int32_t i = 1; i < nb; ++i) {
       hnsw->addPoint(i);
       int32_t cur = cnt += 1;
@@ -46,7 +46,7 @@ template <SymComputableQuantConcept QuantType> struct HNSW : public Builder {
     auto ed = std::chrono::high_resolution_clock::now();
     auto ela = std::chrono::duration<double>(ed - st).count();
     final_graph.init(nb, R);
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int64_t i = 0; i < nb; ++i) {
       int32_t *edges = (int32_t *)hnsw->get_linklist0(i);
       for (int j = 1; j <= edges[0]; ++j) {

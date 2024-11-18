@@ -202,7 +202,7 @@ private:
   std::vector<float> compute_dist(const Tensor &tensor) const {
     int n = tensor.size();
     std::vector<float> dists(n * n_cluster);
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < n; ++i) {
       ComputerType computer(medoids, (const float *)tensor.get(i), MemCpyTag{});
       for (int j = 0; j < n_cluster; ++j) {
@@ -217,7 +217,7 @@ private:
     double loss = 0.0;
     int32_t n = tensor.size();
     std::vector<int32_t> idx(n);
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < n; ++i) {
       float min_dist = HUGE_VALF;
       int32_t min_id = -1;
@@ -265,11 +265,17 @@ private:
     if (spherical) {
       int32_t n = centroids.size();
       int32_t d = centroids.dim();
+
+      std::cout << "N: " << n << " D: " << d << "\n";
       for (int i = 0; i < n; ++i) {
+        printf("I:%d\n", i);
         float *x = (float *)centroids.get(i);
+        std::cout << "X: " << x << "\n";
         float norm = helpa::dot_fp32_fp32(x, x, d);
+        std::cout << "Norm: " << norm << "\n";
         float div = 1.0f / sqrtf(norm);
         for (int j = 0; j < d; ++j) {
+          std::cout << "J: " << j << "\n";
           x[j] *= div;
         }
       }

@@ -102,7 +102,7 @@ struct IndexSparse {
   void refine_batch(int32_t nq, const int32_t *indptr, const int32_t *indices,
                     const float *data, int32_t refine_topk, int32_t *refine_ids,
                     int32_t topk, int32_t *res_ids) {
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < nq; ++i) {
       int32_t nnz = indptr[i + 1] - indptr[i];
       const int32_t *cur_indices = indices + indptr[i];
@@ -137,7 +137,7 @@ struct IndexSparse {
                          const int32_t *indices, const float *data,
                          int32_t topk, int32_t *res, float budget) {
 
-#pragma omp parallel for num_threads(96)
+#pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < nq; ++i) {
       search_wand(indptr[i + 1] - indptr[i], indices + indptr[i],
                   data + indptr[i], topk, res + i * topk, budget);
